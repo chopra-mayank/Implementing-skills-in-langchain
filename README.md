@@ -8,22 +8,17 @@
 
 ## Table of Contents
 
-1. [The Problem (in plain English)](#1-the-problem-in-plain-english) — what the task asks for, in one line
-2. [What I Understood (the concepts)](#2-what-i-understood-the-concepts) — Tool, Skill, Agent, and how they bind together
-3. [The Solution — What I Built](#3-the-solution--what-i-built) — file layout + per-file responsibilities
-   - [End-to-End Flow (click to expand)](#end-to-end-flow-click-to-expand) — ASCII diagram of one full query
-4. [My Approach — Why the Code Looks Like This](#4-my-approach--why-the-code-looks-like-this) — honest engineering notes + what I used from the official docs
-5. [How to Reuse This in Another Project / Framework](#5-how-to-reuse-this-in-another-project--framework) — porting recipes (Deep Agents, AgentExecutor, LangGraph, anything else)
-6. [Running the Demo](#6-running-the-demo) — install + run commands
-7. [Deep Dive — Every File, Every Function](#7-deep-dive--every-file-every-function) — line-by-line walkthrough
-   - [7.1 `tools.py` — the Tool layer](#71--toolspy--the-tool-layer)
-   - [7.2 `skills/ticket-analyzer/SKILL.md` — the Skill layer](#72--skillsticket-analyzerskillmd--the-skill-layer)
-   - [7.3 `agent.py` — the wiring layer](#73--agentpy--the-wiring-layer)
-   - [7.4 Putting it together — the actual runtime flow](#74--putting-it-together--the-actual-runtime-flow)
+1. [The Problem](#1-the-problem)
+2. [What I Understood](#2-what-i-understood-the-concepts)
+3. [The Solution](#3-the-solution--what-i-built)
+4. [My Approach](#4-my-approach--why-the-code-looks-like-this)
+5. [How to Reuse This in Another Project / Framework](#5-how-to-reuse-this-in-another-project--framework)
+6. [Running the Demo](#6-running-the-demo)
+7. [Deep Dive — Every File, Every Function](#7-deep-dive--every-file-every-function)
 
 ---
 
-## 1. The Problem (in plain English)
+## 1. The Problem
 
 > *"How do I create a Skill, plug it into a LangChain agent along with a
 > custom Tool, and make the agent follow the Skill's instructions?"*
