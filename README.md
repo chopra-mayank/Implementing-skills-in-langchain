@@ -615,22 +615,4 @@ When you run `python agent.py`, this sequence happens:
 The whole thing is **two LLM calls and one tool call**. That's why it's
 fast.
 
----
-
-## 8. Talking Points for the Mentor Review
-
-- **Separation of concerns.** Domain knowledge ("how to write a ticket
-  report") lives in `SKILL.md`, not in Python. Non-engineers can edit
-  the skill without touching code.
-- **Reusability.** The same skill works against fake data, a real DB,
-  or a REST API — just swap the tool's body.
-- **Portability.** Skills are markdown + YAML. They survive framework
-  migrations (Deep Agents → LangGraph → CrewAI → anything else).
-- **Progressive disclosure.** Loading only the description up-front
-  keeps the system prompt small even when there are many skills.
-- **Why I bypassed `create_deep_agent`.** Deep Agents shines when you
-  need sub-agents, virtual filesystem, and multi-step planning. For a
-  single-skill demo it adds latency and tool-call format errors on
-  Groq's strict validator. The lightweight version preserves every
-  concept the mentor needs to see, runs ~10× faster, and is ~30 lines
-  of code start to finish.
+--
