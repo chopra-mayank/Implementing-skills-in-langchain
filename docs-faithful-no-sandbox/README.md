@@ -15,7 +15,7 @@ sandbox needed.
 6. [Portability — copying a skill into another project](#6-portability--copying-a-skill-into-another-project)
 7. [When to use this pattern in real life](#7-when-to-use-this-pattern-in-real-life)
 8. [Running the demo](#8-running-the-demo)
-9. [TL;DR for your mentor](#9-tldr-for-your-mentor)
+9. [TL;DR](#9-tldr)
 
 ---
 
@@ -321,7 +321,7 @@ and the loop runs continuously.
 
 ---
 
-## 9. TL;DR for your mentor
+## 9. TL;DR
 
 > This folder is the **simplest possible expression** of the Deep
 > Agents Skills pattern: pure instruction skills, no custom tools, no

@@ -18,7 +18,7 @@ backend's shell.
 9. [Portability — copying a skill into another project](#9-portability--copying-a-skill-into-another-project)
 10. [When to use this pattern in real life](#10-when-to-use-this-pattern-in-real-life)
 11. [Running the demo](#11-running-the-demo)
-12. [TL;DR for your mentor](#12-tldr-for-your-mentor)
+12. [TL;DR](#12-tldr)
 
 ---
 
@@ -457,7 +457,7 @@ TPM) and the loop runs continuously.
 
 ---
 
-## 12. TL;DR for your mentor
+## 12. TL;DR
 
 > This folder demonstrates the **Type C skill pattern**: each skill
 > bundles its own Python script and the agent runs it via the backend's
