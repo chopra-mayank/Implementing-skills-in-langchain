@@ -20,6 +20,13 @@
    - [7.2 `skills/ticket-analyzer/SKILL.md` — the Skill layer](#72--skillsticket-analyzerskillmd--the-skill-layer)
    - [7.3 `agent.py` — the wiring layer](#73--agentpy--the-wiring-layer)
    - [7.4 Putting it together — the actual runtime flow](#74--putting-it-together--the-actual-runtime-flow)
+8. [Scaling Up — Multiple Skills & Multiple Tools](#8-scaling-up--multiple-skills--multiple-tools) — router pattern, flowchart, when to switch to `create_deep_agent`
+   - [8.1 New files added for this scenario](#81-new-files-added-for-this-scenario)
+   - [8.2 The selection problem](#82-the-selection-problem)
+   - [8.3 Flowchart with an example](#83-flowchart-with-an-example)
+   - [8.4 How the main agent's system prompt behaves](#84-how-the-main-agents-system-prompt-behaves)
+   - [8.5 What the user sees](#85-what-the-user-sees)
+   - [8.6 Is `create_deep_agent` easier here?](#86-is-create_deep_agent-easier-here)
 
 ---
 
@@ -631,5 +638,165 @@ When you run `python agent.py`, this sequence happens:
 
 The whole thing is **two LLM calls and one tool call**. That's why it's
 fast.
+
+---
+
+## 8. Scaling Up — Multiple Skills & Multiple Tools
+
+The single-skill demo above answers one question: *can I plug a Skill
+and a Tool into an agent?* Yes. But a real project will have many
+skills and many tools. **How does the agent know which skill applies to
+which query, and which tools each skill is allowed to use?**
+
+This section answers that with a working demo that lives alongside the
+single-skill code (nothing in §3–§7 changes).
+
+### 8.1 New files added for this scenario
+
+| File | Purpose |
+| --- | --- |
+| `tools_extra.py` | Two more `@tool` functions: `process_refund`, `get_customer_profile`. |
+| `skills/refund-processor/SKILL.md` | Skill that issues refunds. `allowed-tools: process_refund` |
+| `skills/customer-profile/SKILL.md` | Skill that returns a customer's profile. `allowed-tools: get_customer_profile` |
+| `agent_multi.py` | A router-style agent that picks the right skill per query. |
+
+We now have **3 skills** (`ticket-analyzer`, `refund-processor`,
+`customer-profile`) and **3 tools** (`fetch_support_tickets`,
+`process_refund`, `get_customer_profile`). Each skill declares which
+tool(s) it is allowed to call via its `allowed-tools` frontmatter field.
+
+### 8.2 The selection problem
+
+Two decisions have to be made for every user query:
+
+1. **Which skill applies?** ("issue a refund" → `refund-processor`,
+   not `customer-profile`).
+2. **Which tools should be active?** Once a skill is picked, only the
+   tools listed in its `allowed-tools` field should be callable. This
+   prevents the refund skill from accidentally calling
+   `fetch_support_tickets` or vice-versa.
+
+`agent_multi.py` solves both with a **two-stage router pattern**:
+
+- **Stage 1 (Router LLM)** — sees only the lightweight *skill index*
+  (name + description of every skill). Picks one. This is "progressive
+  disclosure" in practice: skill bodies stay out of the prompt until
+  one is selected.
+- **Stage 2 (Executor agent)** — loads the chosen skill's full body
+  and binds *only* the tools listed in its `allowed-tools`. A new
+  `create_react_agent` is built with that narrow scope and runs the
+  query.
+
+### 8.3 Flowchart with an example
+
+<details>
+<summary><b>Click to expand — full multi-skill flow</b></summary>
+
+Example query: `"Please refund $25.50 against ticket T-102."`
+
+```
+                       ┌─────────────────────────────────────┐
+                       │ USER                                │
+                       │ "Refund $25.50 against T-102"       │
+                       └────────────────┬────────────────────┘
+                                        │
+                                        ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ agent_multi.py  ::  handle(user_query)                               │
+│                                                                      │
+│   discover_skills(./skills/)  → scans every */SKILL.md               │
+│        ├── ticket-analyzer   (uses fetch_support_tickets)            │
+│        ├── refund-processor  (uses process_refund)                   │
+│        └── customer-profile  (uses get_customer_profile)             │
+│                                                                      │
+│   build_skill_index(skills)   → small catalog string                 │
+│        "- ticket-analyzer: Use whenever the user asks for…"          │
+│        "- refund-processor: Use when the user wants to issue…"       │
+│        "- customer-profile: Use when the user asks for a profile…"   │
+└────────────────────────────────┬─────────────────────────────────────┘
+                                 │
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ STAGE 1  ::  Router LLM  (route_to_skill)                            │
+│                                                                      │
+│   sees:    skill_index (descriptions only, ~150 tokens)              │
+│            + user query                                              │
+│   decides: matches "$25.50 against T-102" against descriptions       │
+│   returns: "refund-processor"                                        │
+│                                                                      │
+│   NOTE: skill BODIES are NOT in this prompt. Only name+description.  │
+│         All 3 tool schemas are also NOT here. Tiny, fast call.       │
+└────────────────────────────────┬─────────────────────────────────────┘
+                                 │
+                                 ▼
+┌──────────────────────────────────────────────────────────────────────┐
+│ STAGE 2  ::  Skill loader + Executor agent  (run_skill)              │
+│                                                                      │
+│   1. Load full body of skills/refund-processor/SKILL.md              │
+│   2. resolve_allowed_tools({"allowed-tools": "process_refund"})      │
+│        → looks up "process_refund" in TOOL_REGISTRY                  │
+│        → returns [process_refund]   (NOT all 3 tools — just this 1)  │
+│   3. Build system prompt with the skill body embedded.               │
+│   4. create_react_agent(model, tools=[process_refund], prompt=…)     │
+│                                                                      │
+│   ReAct loop runs:                                                   │
+│      • Turn 1 LLM → tool_call(process_refund, "T-102", 25.50)        │
+│      • Tool node  → returns {confirmation_id: "REF-T-102-2550", …}   │
+│      • Turn 2 LLM → formats per the skill's "Expected Output Format" │
+└────────────────────────────────┬─────────────────────────────────────┘
+                                 │
+                                 ▼
+                ┌────────────────────────────────────┐
+                │ FINAL ANSWER                       │
+                │                                    │
+                │ Refund Confirmation                │
+                │ -------------------                │
+                │ Ticket:        T-102               │
+                │ Amount:        $25.50              │
+                │ Status:        refunded            │
+                │ Confirmation:  REF-T-102-2550      │
+                └────────────────────────────────────┘
+```
+
+**Cost:** 1 router call + 2 executor calls + 1 tool call ≈ ~2 seconds.
+
+</details>
+
+### 8.4 How the main agent's system prompt behaves
+
+You now have **three system prompts in play across the lifetime of a query**, each scoped tightly:
+
+| Stage | System prompt contents | Visible tools |
+|---|---|---|
+| Router | "You are a router. Catalog: <name + description × N>. Reply with one skill name." | none |
+| Executor (refund) | "You are following the refund-processor skill." + full SKILL.md body | only `process_refund` |
+| Executor (tickets) | "You are following the ticket-analyzer skill." + full SKILL.md body | only `fetch_support_tickets` |
+
+Note that **no single LLM call ever sees all skills' bodies or all tools at once**. The router only sees descriptions; the executor only sees the chosen skill plus its allowed tools. That's the win — the prompt stays small and the tool surface area stays tight, regardless of how many skills you add. Add 50 skills and the router prompt grows by ~150 tokens; the executor prompt does not grow at all.
+
+### 8.5 What the *user* sees
+
+Nothing different from the single-skill version. The user just types a question and gets the answer. All the routing and tool-gating is invisible. Run it:
+
+```powershell
+python agent_multi.py
+```
+
+You'll see three example queries dispatched to three different skills automatically — the terminal prints `[router] Chose: <skill>` for each, so the dispatch is visible while you're demoing.
+
+### 8.6 Is `create_deep_agent` easier here?
+
+**Yes — measurably.** For 1–2 skills the hand-rolled router in `agent_multi.py` is cleaner. From 3+ skills the framework starts earning its keep:
+
+| Concern | Hand-rolled (`agent_multi.py`) | `create_deep_agent` |
+|---|---|---|
+| Scanning multiple `SKILL.md` files | I wrote `discover_skills()` | Built-in — pass `skills=["./skills"]` |
+| Building the skill index for routing | I wrote `build_skill_index()` | Built-in |
+| Picking the right skill per query | I wrote `route_to_skill()` (a whole extra LLM call) | Built-in via the skills middleware |
+| Filtering tools by `allowed-tools` | I wrote `resolve_allowed_tools()` | Built-in |
+| Sub-agents (one skill triggering another) | I'd have to build orchestration | Built-in (`subagents` middleware) |
+| Virtual filesystem (skill reads/writes scratch files) | I'd have to build it | Built-in (`FilesystemBackend`) |
+
+The good news: **the `SKILL.md` files don't change either way.** They are a portable artifact. The same files work with the hand-rolled router, with `create_deep_agent`, with a future CrewAI port, or anything else.
 
 --
